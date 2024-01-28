@@ -16,6 +16,8 @@ db = client['QuincyDB']
 fs = gridfs.GridFS(db)
 
 
+
+
 def read_pickle_from_gridfs(filename):
     """
     Read a Pickle file from MongoDB GridFS and return the data
@@ -29,8 +31,16 @@ def write_pickle_to_gridfs(data, filename):
     Write a Pickle file to MongoDB GridFS
     """
     pickle_data = pickle.dumps(data)
-    fs.put(pickle_data, filename=filename)
 
+    # Check if the file already exists
+    existing_file = fs.find_one({"filename": filename})
+
+    if existing_file:
+        # If the file exists, delete it before creating a new one
+        fs.delete(existing_file._id)
+
+    # Create a new file
+    fs.put(pickle_data, filename=filename, encoding="utf-8")
 
 
 def read_excel(file):
@@ -40,9 +50,25 @@ def read_excel(file):
     df = pd.read_excel(fs.find_one({"filename": file}).read())
     return df
 
+
 def write_excel_to_gridfs(df, filename):
-    file_content = df.to_excel(index=False, engine="openpyxl")
-    fs.put(file_content, filename=filename)
+    """
+    Write an Excel file to MongoDB GridFS
+    """
+    excel_data = BytesIO()
+    with pd.ExcelWriter(excel_data, engine="openpyxl", mode="w", index=False) as writer:
+        df.to_excel(writer)
+    
+    # Check if the file already exists
+    existing_file = fs.find_one({"filename": filename})
+
+    if existing_file:
+        # If the file exists, delete it before creating a new one
+        fs.delete(existing_file._id)
+
+    # Create a new file
+    fs.put(excel_data.getvalue(), filename=filename, encoding="utf-8")
+
 
 def update_excel():
     """
@@ -95,7 +121,8 @@ def update_excel():
     write_pickle_to_gridfs(tot_given, tot_given_filename)
     write_pickle_to_gridfs(tot_ordered, tot_ordered_filename)
     write_pickle_to_gridfs(total_received, total_received_filename)
-    write_excel_to_gridfs(excel_export, excel_export_filename)
+    with open(excel_export_filename, 'rb') as file:
+        fs.put(file, filename=excel_export_filename)
 
 # Upload two Excel files
 st.sidebar.header("Upload Files")
