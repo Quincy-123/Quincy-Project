@@ -243,13 +243,25 @@ elif invoice_submit:
 generate_excel = st.sidebar.button("Generate Excel")
 if generate_excel:  
     update_excel()
-    filename = str(datetime.datetime.now())
-    with open("Sales_Info_updated_1.xlsx", "rb") as file: 
-        btn = st.sidebar.download_button( 
-            label="Download Report",
-            data=file,
-            file_name=f"{filename}_Sales_Info.xlsx",
-            mime="xlsx"
+
+    # Specify the Excel file name in GridFS
+    excel_filename = "Sales_Info_updated_1.xlsx"
+
+    # Read the Excel file from GridFS
+    file_content = fs.get_version(excel_filename, -1).read()
+
+    # Create a BytesIO object to simulate reading from a file
+    file_io = io.BytesIO(file_content)
+
+    # Provide a filename for the download button
+    download_filename = f"{datetime.datetime.now()}_Sales_Info.xlsx"
+
+    # Display the download button
+    btn = st.sidebar.download_button( 
+        label="Download Report",
+        data=file_io,
+        file_name=download_filename,
+        mime="xlsx"
     )
 
 # visualization
