@@ -268,7 +268,7 @@ def zero_sales(data):
     return data.query("OfferedPercent > 0 and SalesPercent == 0")
 
 # Upload Excel file
-data = pd.read_excel('Sales_Info_updated_1.xlsx')
+data = read_excel('Sales_Info_updated_1.xlsx')
 data = data.rename(columns={'Total Ordered vs Total Offered (Percentage)': 'OfferedPercent', 'Total Sales vs Total Offered (Percentage)' : 'SalesPercent', 'Product Name': 'name'})
 
 st.title('Quincy Data Visualization')
