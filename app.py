@@ -40,6 +40,10 @@ def read_excel(file):
     df = pd.read_excel(fs.find_one({"filename": file}).read())
     return df
 
+def write_excel_to_gridfs(df, filename):
+    file_content = df.to_excel(index=False, engine="openpyxl")
+    fs.put(file_content, filename=filename)
+
 def update_excel():
     """
     Updates the Excel sheet based on:
@@ -91,7 +95,7 @@ def update_excel():
     write_pickle_to_gridfs(tot_given, tot_given_filename)
     write_pickle_to_gridfs(tot_ordered, tot_ordered_filename)
     write_pickle_to_gridfs(total_received, total_received_filename)
-    fs.put(open(excel_export_filename, 'rb'), filename=excel_export_filename)
+    write_excel_to_gridfs(excel_export, excel_export_filename)
 
 # Upload two Excel files
 st.sidebar.header("Upload Files")
