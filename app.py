@@ -9,7 +9,7 @@ import plotly.express as px
 import streamlit as st
 
 # Connect to MongoDB Atlas
-client = MongoClient('mongodb+srv://quincyproject123:Quincy123@quincy.4dmgggd.mongodb.net/?retryWrites=true&w=majority')
+client = st.secrets["db_conn_string"]
 # Select the database and create a GridFS object
 db = client['QuincyDB']
 fs = gridfs.GridFS(db)
