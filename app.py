@@ -37,7 +37,7 @@ def read_excel(file):
     """
     Read the Excel file from MongoDB GridFS and return a DataFrame
     """
-    file_content = fs.get(file).read()
+    file_content = fs.find_one({"filename": file}).read()
     df = pd.read_excel(pd.compat.BytesIO(file_content), engine="openpyxl")
     return df
 
