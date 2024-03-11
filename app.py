@@ -7,6 +7,7 @@ import pickle
 import datetime
 import plotly.express as px
 import streamlit as st
+import io
 
 # Connect to MongoDB Atlas
 mongo_connection_string = st.secrets["mongo"]["connection_string"]
