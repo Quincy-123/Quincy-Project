@@ -8,7 +8,6 @@ import datetime
 import plotly.express as px
 import streamlit as st
 import io
-
 # Connect to MongoDB Atlas
 mongo_connection_string = st.secrets["mongo"]["connection_string"]
 client = MongoClient(mongo_connection_string)
@@ -48,9 +47,16 @@ def read_excel(file):
     """
     Read the Excel file from MongoDB GridFS and return a DataFrame
     """
-    df = pd.read_excel(fs.find_one({"filename": file}).read())
+    # Read the raw content of the file from GridFS
+    file_content = fs.find_one({"filename": file}).read()
+    
+    # Convert the raw content into a file-like object using io.BytesIO
+    excel_file = io.BytesIO(file_content)
+    
+    # Use pd.read_excel to read the Excel file from the file-like object
+    df = pd.read_excel(excel_file)
+    
     return df
-
 
 def write_excel_to_gridfs(df, filename):
     """
@@ -246,7 +252,7 @@ if invoice_excel and invoice_submit:
     file_name_invoice = invoice_excel.name.split('.')[0].split(' ')[0]
     if file_name_invoice not in invoice_list:
         invoice_list.append(file_name_invoice)
-        df1 = read_excel(invoice_excel)
+        df1 = pd.read_excel(invoice_excel)
 
         invoice_pickle = read_pickle_from_gridfs('total_given.pickle')
 
