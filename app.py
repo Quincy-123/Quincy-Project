@@ -8,15 +8,114 @@ import datetime
 import plotly.express as px
 import streamlit as st
 import io
+import warnings
+from io import BytesIO
+
 # Connect to MongoDB Atlas
 mongo_connection_string = st.secrets["mongo"]["connection_string"]
 client = MongoClient(mongo_connection_string)
 # Select the database and create a GridFS object
 db = client['QuincyDB']
+db_po = client['PO_Quincy']
+db_invoice = client['Invoice_Quincy']
 fs = gridfs.GridFS(db)
 
 
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def process_data(df_po, df_invoice, start_date_str, end_date_str):
+    # Convert start_date and end_date to datetime objects
+    start_date = pd.to_datetime(start_date_str)
+    end_date = pd.to_datetime(end_date_str)
+
+    df_po.rename(columns={'Quantity' : 'Total Quantity'}, inplace=True)
+    
+    # Merge the dataframes on SKU column
+    merged_df = pd.merge(df_po, df_invoice, on='SKU', how='outer')
+    
+    # If 'Exit Factory Date' column exists, filter data by start date and end date
+    if 'Exit Factory Date' in merged_df.columns:
+        merged_df['Exit Factory Date'] = pd.to_datetime(merged_df['Exit Factory Date'])
+        filtered_df = merged_df[(merged_df['Exit Factory Date'] >= start_date) & (merged_df['Exit Factory Date'] <= end_date)]
+    else:
+        filtered_df = merged_df  # If 'Exit Factory Date' column doesn't exist, use all data
+   
+    if 'Product_x' in filtered_df.columns:
+        # Group by SKU and calculate sum of Quantity and Total
+        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product_x': 'first'})
+    elif 'Product' in filtered_df.columns:
+        # Group by SKU and calculate sum of Quantity and Total
+        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product': 'first'})
+    else:
+        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum'})
+    
+    # Rename columns for clarity
+    grouped_df.rename(columns={'Total Quantity': 'Ordered', 'Quantity': 'Sold'}, inplace=True)
+
+    # Calculate Sale %
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="invalid value encountered in .*")
+        warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide")
+        grouped_df['Sale %'] = (grouped_df['Sold'] / grouped_df['Ordered']) * 100
+
+    # Calculate totals
+    total_ordered = grouped_df['Ordered'].sum()
+    total_sold = grouped_df['Sold'].sum()
+    total_sale_percentage = (total_sold / total_ordered) * 100
+
+    # Add total row to the dataframe
+    total_row = pd.DataFrame({'Ordered': total_ordered, 'Sold': total_sold, 'Sale %': total_sale_percentage}, index=['Total'])
+    grouped_df = pd.concat([grouped_df, total_row])
+
+    return grouped_df
+
+
+def generate_pivot_tables(start_date_str, end_date_str):
+    client = MongoClient('mongodb://localhost:27017/')
+    db_po = client['PO_Quincy']
+    db_invoice = client['Invoice_Quincy']
+    
+    invoice_names = db_invoice.list_collection_names()
+    po_names = db_po.list_collection_names()
+
+    # Create an Excel writer object
+    excel_writer = pd.ExcelWriter('PO_Report.xlsx')
+
+    # Iterate through each purchase order
+    for po_name in po_names:
+        # Create an empty DataFrame to store the data
+        df_combined = pd.DataFrame()
+        
+        # Iterate through each collection
+        for collection_name in invoice_names:
+            # Retrieve data from the collection where Purchase Order Id is equal to po_name
+            collection_data = list(db_invoice[collection_name].find({'Purchase Order Id': int(po_name)}))
+            
+            # Convert retrieved data to DataFrame
+            df_collection = pd.DataFrame(collection_data)
+       
+            # Append it to the combined DataFrame
+            df_combined = pd.concat([df_combined, df_collection], ignore_index=True)
+            
+        if not df_combined.empty:
+            # Group by 'SKU' and sum the 'Quantity' within each group
+            df_grouped = df_combined.groupby(['SKU'], as_index=False)['Quantity'].sum()
+            
+            # Process the data using the process_data function
+            processed_data = process_data(pd.DataFrame(list(db_po[po_name].find({}))), df_grouped, start_date_str, end_date_str)
+
+            if 'Product' in processed_data.columns:
+                processed_data = processed_data[['Product','Ordered','Sold','Sale %']]
+                
+            # Output the pivot table to Excel
+            processed_data.to_excel(excel_writer, sheet_name=po_name)
+
+    # Save the Excel file
+    excel_writer._save()
+
+
+
+#-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def read_pickle_from_gridfs(filename):
     """
@@ -76,6 +175,16 @@ def write_excel_to_gridfs(df, filename):
     # Create a new file
     fs.put(excel_data.getvalue(), filename=filename, encoding="utf-8")
 
+def read_pickle_from_gridfs(filename):
+    """
+    Read a Pickle file from MongoDB GridFS and return the data
+    """
+    pickle_data = fs.find_one({"filename": filename})
+    if pickle_data is not None:
+        data = pickle.loads(pickle_data.read())
+        return data
+    else:
+        return None
 
 def update_excel():
     """
@@ -187,6 +296,11 @@ if pending_order and pending_submit:
         write_pickle_to_gridfs(total_ordered_map, 'total_ordered.pickle')
         po = sorted(po)
         write_pickle_to_gridfs(po, 'po.pickle')
+        #Upload the added file to the DB
+        po_data = pd.read_excel(pending_order)
+        po_name = os.path.splitext(pending_order)[0]
+        PO[po_name].insert_many(po_data.to_dict('records'))
+        #Update the data in Excel File
         update_excel()
         st.success(f'{pending_order.name} PO file has been processed successfully', icon="✅")
     
@@ -233,6 +347,11 @@ if received_order and received_submit:
         write_pickle_to_gridfs(processed_po, 'processed_po.pickle')
         write_pickle_to_gridfs(pending_list, 'pending_list_map.pickle')
         write_pickle_to_gridfs(total_received_map, 'received.pickle')
+        #Upload the added file to the DB
+        po_data = pd.read_excel(received_order)
+        po_name = os.path.splitext(received_order)[0]
+        PO[po_name].insert_many(po_data.to_dict('records'))
+        #Update the Excel File
         update_excel()
         st.success(f'{received_order.name} PO file has been processed successfully', icon="✅")
     
@@ -269,6 +388,11 @@ if invoice_excel and invoice_submit:
         write_pickle_to_gridfs(invoice_pickle, 'total_given.pickle')
         invoice_list = sorted(invoice_list)
         write_pickle_to_gridfs(sorted(invoice_list), 'invoice_list_map.pickle')
+        #Upload the added file to the DB
+        invoice_data = pd.read_excel(invoice_excel)
+        invoice_name = os.path.splitext(pinvoice_excel)[0]
+        Invoice[invoice_name].insert_many(invoice_data.to_dict('records'))
+        #Update the excel file
         update_excel()
         st.success(f'{invoice_excel.name} file has been processed successfully', icon="✅")
     else:
@@ -415,3 +539,43 @@ fig2.update_layout(barmode='group', bargap=0.1, title=f'Total Sales vs Total Off
 
 st.plotly_chart(fig)
 st.plotly_chart(fig2)
+
+
+# Create date input widgets in the sidebar
+start_date = st.sidebar.date_input("Start Date", datetime.date(2022, 1, 1))
+end_date = st.sidebar.date_input("End Date", datetime.date(2024, 4, 10))
+
+# Button to generate PO wise data
+generate_excel_po = st.sidebar.button("Generate PO Wise Data")
+
+if generate_excel_po:
+    # Format the dates
+    formatted_start_date = start_date.strftime("%Y-%m-%d")
+    formatted_end_date = end_date.strftime("%Y-%m-%d")
+    
+    # Call the function with formatted dates
+    generate_pivot_tables(formatted_start_date, formatted_end_date)
+    
+    # Provide a filename for the download button
+    excel_filename = "PO_Report.xlsx"
+    # Read the Excel file
+    excel_data = pd.read_excel(excel_filename)
+
+    # Write Excel data to GridFS
+    # write_excel_to_gridfs(excel_data, excel_filename) // To DO for now
+    # Read the Excel file
+    file_content = open(excel_filename, "rb").read()
+
+    # Create a BytesIO object to simulate reading from a file
+    file_io = io.BytesIO(file_content)
+
+    # Provide a filename for the download button
+    download_filename = f"Sales_Report_PO_Wise_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
+
+    # Display the download button
+    btn = st.sidebar.download_button( 
+        label="Download PO-Report",
+        data=file_io,
+        file_name=download_filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
