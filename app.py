@@ -71,10 +71,7 @@ def process_data(df_po, df_invoice, start_date_str, end_date_str):
 
 
 def generate_pivot_tables(start_date_str, end_date_str):
-    client = MongoClient('mongodb://localhost:27017/')
-    db_po = client['PO_Quincy']
-    db_invoice = client['Invoice_Quincy']
-    
+
     invoice_names = db_invoice.list_collection_names()
     po_names = db_po.list_collection_names()
 
