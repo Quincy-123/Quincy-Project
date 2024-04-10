@@ -42,12 +42,12 @@ def process_data(df_po, df_invoice, start_date_str, end_date_str):
    
     if 'Product_x' in filtered_df.columns:
         # Group by SKU and calculate sum of Quantity and Total
-        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product_x': 'first'})
+        grouped_df = filtered_df.groupby(['SKU','Variant']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product_x': 'first'})
     elif 'Product' in filtered_df.columns:
         # Group by SKU and calculate sum of Quantity and Total
-        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product': 'first'})
+        grouped_df = filtered_df.groupby(['SKU','Variant']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product': 'first'})
     else:
-        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum'})
+        grouped_df = filtered_df.groupby(['SKU','Variant']).agg({'Total Quantity': 'sum', 'Quantity': 'sum'})
     
     # Rename columns for clarity
     grouped_df.rename(columns={'Total Quantity': 'Ordered', 'Quantity': 'Sold'}, inplace=True)
