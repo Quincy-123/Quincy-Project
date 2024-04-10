@@ -315,9 +315,9 @@ if pending_order and pending_submit:
         po = sorted(po)
         write_pickle_to_gridfs(po, 'po.pickle')
         #Upload the added file to the DB
-        po_data = pd.read_excel(pending_order)
-        po_name = os.path.splitext(pending_order)[0]
-        PO[po_name].insert_many(po_data.to_dict('records'))
+        #po_data = pd.read_excel(pending_order)
+        #po_name = os.path.splitext(pending_order)[0]
+        #PO[po_name].insert_many(po_data.to_dict('records'))
         #Update the data in Excel File
         update_excel()
         st.success(f'{pending_order.name} PO file has been processed successfully', icon="✅")
