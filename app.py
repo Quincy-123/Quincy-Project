@@ -40,14 +40,34 @@ def process_data(df_po, df_invoice, start_date_str, end_date_str):
     else:
         filtered_df = merged_df  # If 'Exit Factory Date' column doesn't exist, use all data
    
+    group_columns = ['SKU']
+    if 'Variant' in filtered_df.columns:
+        group_columns.append('Variant')
+
+    # Then use the dynamic list in your grouping
     if 'Product_x' in filtered_df.columns:
-        # Group by SKU and calculate sum of Quantity and Total
-        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product_x': 'first'})
+        grouped_df = filtered_df.groupby(group_columns).agg({
+            'Total Quantity': 'sum', 
+            'Quantity': 'sum',
+            'Product_x': 'first',
+            'Size': 'first',
+            'Color': 'first'
+        })
     elif 'Product' in filtered_df.columns:
-        # Group by SKU and calculate sum of Quantity and Total
-        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum','Product': 'first'})
+        grouped_df = filtered_df.groupby(group_columns).agg({
+            'Total Quantity': 'sum', 
+            'Quantity': 'sum',
+            'Product': 'first',
+            'Size': 'first',
+            'Color': 'first'
+        })
     else:
-        grouped_df = filtered_df.groupby(['SKU']).agg({'Total Quantity': 'sum', 'Quantity': 'sum'})
+        grouped_df = filtered_df.groupby(group_columns).agg({
+            'Total Quantity': 'sum', 
+            'Quantity': 'sum',
+            'Size': 'first',
+            'Color': 'first'
+        })
     
     # Rename columns for clarity
     grouped_df.rename(columns={'Total Quantity': 'Ordered', 'Quantity': 'Sold'}, inplace=True)
@@ -68,7 +88,6 @@ def process_data(df_po, df_invoice, start_date_str, end_date_str):
     grouped_df = pd.concat([grouped_df, total_row])
 
     return grouped_df
-
 
 def generate_pivot_tables(start_date_str, end_date_str):
 
@@ -102,13 +121,15 @@ def generate_pivot_tables(start_date_str, end_date_str):
             processed_data = process_data(pd.DataFrame(list(db_po[po_name].find({}))), df_grouped, start_date_str, end_date_str)
 
             if 'Product' in processed_data.columns:
-                processed_data = processed_data[['Product','Ordered','Sold','Sale %']]
+                processed_data = processed_data[['Product','Color','Size','Ordered','Sold','Sale %']]
                 
             # Output the pivot table to Excel
             processed_data.to_excel(excel_writer, sheet_name=po_name)
 
     # Save the Excel file
     excel_writer._save()
+
+
 
 
 
